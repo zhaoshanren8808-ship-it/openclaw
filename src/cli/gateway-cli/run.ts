@@ -365,6 +365,23 @@ async function runGatewayCommand(opts: GatewayRunOpts) {
       (err && typeof err === "object" && (err as { name?: string }).name === "GatewayLockError")
     ) {
       const errMessage = describeUnknownError(err);
+      const isAlreadyRunning = errMessage.includes("already running");
+      if (isAlreadyRunning) {
+        // Idempotent behavior: gateway already running is a success state
+        defaultRuntime.log(`Gateway is already running and healthy.`);
+        try {
+          const diagnostics = await inspectPortUsage(port);
+          if (diagnostics.status === "busy") {
+            for (const line of formatPortDiagnostics(diagnostics)) {
+              defaultRuntime.log(line);
+            }
+          }
+        } catch {
+          // ignore diagnostics failures
+        }
+        defaultRuntime.exit(0);
+        return;
+      }
       defaultRuntime.error(
         `Gateway failed to start: ${errMessage}\nIf the gateway is supervised, stop it with: ${formatCliCommand("openclaw gateway stop")}`,
       );
